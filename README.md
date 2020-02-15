@@ -1,4 +1,4 @@
-#DS3231 clock
+# DS3231 clock
 
 This is my implementation of AdaFruit's excellently documented
 [Metro Minimalist Clock](https://learn.adafruit.com/metro-minimalist-clock)
