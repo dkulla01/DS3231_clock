@@ -39,6 +39,35 @@ bool downButtonPushed = false;
 unsigned long downButtonLastPushedAt = 0;
 unsigned long downButtonLastReleasedAt = 0;
 
+void setButtonState() {
+  unsigned long now = millis();
+  
+  // set the button states for the up button
+  upButtonState = digitalRead(UP_BUTTON);
+  bool isUpButtonCurrentlyPushed = upButtonState == LOW;
+  
+  if (isUpButtonCurrentlyPushed && !upButtonPushed) {
+    // state change: on last iteration of loop, button wasn't pushed, but now it is
+    upButtonLastPushedAt = now;
+  } else if (!isUpButtonCurrentlyPushed && upButtonPushed) {
+    // state change: on last iteration of loop, button was pushed, but now it isn't
+    upButtonLastReleasedAt = now;
+  }
+  upButtonPushed = isUpButtonCurrentlyPushed;
+
+  // set the button states for the down button;
+  downButtonState = digitalRead(DOWN_BUTTON);
+  bool isDownButtonCurrentlyPushed = downButtonState == LOW;
+
+  if (isDownButtonCurrentlyPushed && !downButtonPushed) {
+    // state change: on last iteration of loop, button wasn't pushed, but now it is
+    downButtonLastPushedAt = now;
+  } else if (!isDownButtonCurrentlyPushed && downButtonPushed) {
+    // state change: on last iteration of loop, button was pushed, but now it isn't
+    downButtonLastReleasedAt = now;
+  }
+  downButtonPushed = isDownButtonCurrentlyPushed;
+}
 
 void setup() {
   Serial.begin(115200);
@@ -70,8 +99,8 @@ void setup() {
 
 }
 
-void loop() {
-    if (minutes == 0) {
+void runClockLoop() {
+  if (minutes == 0) {
     // Get the time from the DS3231.
     DateTime now = rtc.now();
     // Print out the time for debug purposes:
@@ -123,33 +152,94 @@ void loop() {
     hours = 0;
   }
 }
-
-void setButtonState() {
+//todo:
+// - if button pushed for the first time, increment by one.
+// - if button pushed, increment has happened, but has been held for less than 500ms, don't increment
+// - if button has been pushed and held for more than 2s, increment by 15
+void incrementSetTime() {
   unsigned long now = millis();
-  
-  // set the button states for the up button
-  upButtonState = digitalRead(UP_BUTTON);
-  bool isUpButtonCurrentlyPushed = upButtonState == LOW;
-  
-  if (isUpButtonCurrentlyPushed && !upButtonPushed) {
-    // state change: on last iteration of loop, button wasn't pushed, but now it is
-    upButtonLastPushedAt = now;
-  } else if (!isUpButtonCurrentlyPushed && upButtonPushed) {
-    // state change: on last iteration of loop, button was pushed, but now it isn't
-    upButtonLastReleasedAt = now;
-  }
-  upButtonPushed = isUpButtonCurrentlyPushed;
 
-  // set the button states for the down button;
-  downButtonState = digitalRead(DOWN_BUTTON);
-  bool isDownButtonCurrentlyPushed = downButtonState == LOW;
-
-  if (isDownButtonCurrentlyPushed && !downButtonPushed) {
-    // state change: on last iteration of loop, button wasn't pushed, but now it is
-    downButtonLastPushedAt = now;
-  } else if (!isDownButtonCurrentlyPushed && downButtonPushed) {
-    // state change: on last iteration of loop, button was pushed, but now it isn't
-    downButtonLastReleasedAt = now;
+  bool buttonHeld = now - upButtonLastPushedAt > 2000;
+  // if the button has been held for more than 5s, go up to the next multiple of 15
+  if (buttonHeld) {
+    int nextLowestMultipleOf15 = minutes / 15 * 15;
+    minutes += 15;
+  } else  {
+    minutes += 1;
   }
-  downButtonPushed = isDownButtonCurrentlyPushed;
+
+  if (minutes > 59) {
+    minutes = 0;
+    hours += 1;
+  }
+  
+  if (hours > 23) {
+    hours = 0;
+  }
+}
+
+void decrementSetTime() {
+  unsigned long now = millis();
+  bool buttonHeld = now - downButtonLastPushedAt > 2000;
+
+  // if the button has been held for more than 5s, go down to the next lowest multiple of 15
+  if (buttonHeld) {
+    int nextLowestMultipleOf15 = minutes / 15 * 15;
+    
+    if (nextLowestMultipleOf15 == minutes) {
+      minutes -= 15;
+    } else {
+      minutes = nextLowestMultipleOf15;
+    }
+  } else {
+    minutes -= 1;
+  }
+
+  if (minutes < 0) {
+    minutes = 59;
+    hours -= 1;
+  }
+
+  if (hours < 0) {
+    hours = 23;
+  }
+}
+
+void runTimeSettingLoop() {
+  // floor the seconds as a matter of course
+  seconds = 0;
+  // if the up button is pushed increase the time
+  if (upButtonPushed && !downButtonPushed) {
+    incrementSetTime();
+  } else if (downButtonPushed && !upButtonPushed) {
+    decrementSetTime();
+  }
+
+    int displayHours = hours;
+  if (!USE_24_HOUR_TIME) {
+    if (hours > 12) {
+      displayHours = hours - 12;
+    } else if (hours == 0) {
+      displayHours = 12;
+    }
+  }
+  int decimalDisplayTime = displayHours * 100 + minutes;
+
+  display.showNumberDecEx(decimalDisplayTime, COLON_OFF, USE_24_HOUR_TIME); 
+
+  delay(100);
+}
+
+void loop() {
+  setButtonState();
+  if (downButtonPushed && upButtonPushed) {
+    Serial.println("BOTH PUSHED");
+  } else if (downButtonPushed) {
+    Serial.println("down button pushed");
+  } else if (upButtonPushed) {
+    Serial.println("up button pushed");
+  }
+
+  runTimeSettingLoop();
+  // runClockLoop();
 }
