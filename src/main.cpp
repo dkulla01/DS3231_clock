@@ -8,6 +8,10 @@
 #define CLK 2
 #define DIO 3
 
+// define the button pins
+#define UP_BUTTON 8
+#define DOWN_BUTTON 9
+
 bool USE_24_HOUR_TIME = false;
 uint8_t COLON_ON = 0x40;
 uint8_t COLON_OFF = 0x00;
@@ -23,15 +27,27 @@ int minutes = 0;
 int seconds = 0;
 
 bool blinkColon = false;
+bool inSetTimeMode = false;
+
+int upButtonState = HIGH;
+bool upButtonPushed = false;
+unsigned long upButtonLastPushedAt = 0;
+unsigned long upButtonLastReleasedAt = 0;
+
+int downButtonState = HIGH;
+bool downButtonPushed = false;
+unsigned long downButtonLastPushedAt = 0;
+unsigned long downButtonLastReleasedAt = 0;
 
 
 void setup() {
-    Serial.begin(115200);
+  Serial.begin(115200);
   Serial.println("Clock starting!");
   display.setBrightness(7);
   display.showNumberDecEx(8888, COLON_ON);
   delay(3000); // wait for console opening
-
+  pinMode(UP_BUTTON, INPUT);
+  pinMode(DOWN_BUTTON, INPUT);
   rtc.begin();
 
   if (!rtc.begin()) {
@@ -106,4 +122,34 @@ void loop() {
   if (hours > 23) {
     hours = 0;
   }
+}
+
+void setButtonState() {
+  unsigned long now = millis();
+  
+  // set the button states for the up button
+  upButtonState = digitalRead(UP_BUTTON);
+  bool isUpButtonCurrentlyPushed = upButtonState == LOW;
+  
+  if (isUpButtonCurrentlyPushed && !upButtonPushed) {
+    // state change: on last iteration of loop, button wasn't pushed, but now it is
+    upButtonLastPushedAt = now;
+  } else if (!isUpButtonCurrentlyPushed && upButtonPushed) {
+    // state change: on last iteration of loop, button was pushed, but now it isn't
+    upButtonLastReleasedAt = now;
+  }
+  upButtonPushed = isUpButtonCurrentlyPushed;
+
+  // set the button states for the down button;
+  downButtonState = digitalRead(DOWN_BUTTON);
+  bool isDownButtonCurrentlyPushed = downButtonState == LOW;
+
+  if (isDownButtonCurrentlyPushed && !downButtonPushed) {
+    // state change: on last iteration of loop, button wasn't pushed, but now it is
+    downButtonLastPushedAt = now;
+  } else if (!isDownButtonCurrentlyPushed && downButtonPushed) {
+    // state change: on last iteration of loop, button was pushed, but now it isn't
+    downButtonLastReleasedAt = now;
+  }
+  downButtonPushed = isDownButtonCurrentlyPushed;
 }
